@@ -94,51 +94,53 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
     let mut pdb = None;
     let mut depfile = None;
 
-    //TODO: support arguments that start with / as well.
     let mut it = arguments.iter();
     loop {
         match it.next() {
             Some(arg) => {
-                match arg.as_ref() {
-                    "-c" => compilation = true,
-                    v if v.starts_with("-Fo") => {
-                        output_arg = Some(String::from(&v[3..]));
-                    }
-                    // Arguments that take a value.
-                    "-FI" => {
-                        common_args.push(arg.clone());
-                        if let Some(arg_val) = it.next() {
-                            common_args.push(arg_val.clone());
+                match arg {
+                    v if v.starts_with("/") | v.starts_with("-") => match &v[1..] {
+                        "c" => compilation = true,
+                        v if v.starts_with("Fo") => {
+                            output_arg = Some(String::from(&v[2..]));
                         }
-                    }
-                    v @ _ if v.starts_with("-deps") => {
-                        depfile = Some(v[5..].to_owned());
-                    }
-                    // Arguments we can't handle.
-                    "-showIncludes" => return CompilerArguments::CannotCache,
+                        // Arguments that take a value.
+                        "FI" => {
+                            common_args.push(arg.clone());
+                            if let Some(arg_val) = it.next() {
+                                common_args.push(arg_val.clone());
+                            }
+                        }
+                        v @ _ if v.starts_with("deps") => {
+                            depfile = Some(v[4..].to_owned());
+                        }
+                        // Arguments we can't handle.
+                        "showIncludes" => return CompilerArguments::CannotCache,
+                        // Arguments we can't handle because they output more files.
+                        // TODO: support more multi-file outputs.
+                        "FA" | "Fa" | "Fe" | "Fm" | "Fp" | "FR" | "Fx" => return CompilerArguments::CannotCache,
+                        "Zi" => {
+                            debug_info = true;
+                            common_args.push(arg.clone());
+                        }
+                        v if v.starts_with("Fd") => {
+                            pdb = Some(String::from(&v[2..]));
+                            common_args.push(arg.clone());
+                        }
+                        // Other options.
+                        //v if v.starts_with('-') && v.len() > 1 => {
+                        _ => {
+                            common_args.push(arg.clone());
+                        }
+                    },
                     a if a.starts_with('@') => return CompilerArguments::CannotCache,
-                    // Arguments we can't handle because they output more files.
-                    // TODO: support more multi-file outputs.
-                    "-FA" | "-Fa" | "-Fe" | "-Fm" | "-Fp" | "-FR" | "-Fx" => return CompilerArguments::CannotCache,
-                    "-Zi" => {
-                        debug_info = true;
-                        common_args.push(arg.clone());
-                    }
-                    v if v.starts_with("-Fd") => {
-                        pdb = Some(String::from(&v[3..]));
-                        common_args.push(arg.clone());
-                    }
-                    // Other options.
-                    v if v.starts_with('-') && v.len() > 1 => {
-                        common_args.push(arg.clone());
-                    }
                     // Anything else is an input file.
-                    v => {
+                    _ => {
                         if input_arg.is_some() {
                             // Can't cache compilations with multiple inputs.
                             return CompilerArguments::CannotCache;
                         }
-                        input_arg = Some(v);
+                        input_arg = Some(arg);
                     }
                 }
             }
@@ -373,9 +375,9 @@ mod test {
         assert_eq!("blah: ", detect_showincludes_prefix(&mut creator, "cl.exe").unwrap());
     }
 
-    #[test]
-    fn test_parse_arguments_simple() {
-        match parse_arguments(&stringvec!["-c", "foo.c", "-Fofoo.obj"]) {
+    fn test_parse_arguments_good_compile(arguments: &[String])
+    {
+        match parse_arguments(&arguments) {
             CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.c", input);
@@ -388,6 +390,16 @@ mod test {
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
+    }
+
+    #[test]
+    fn test_parse_arguments_simple() {
+        test_parse_arguments_good_compile(&stringvec!["-c", "foo.c", "-Fofoo.obj"]);
+    }
+
+    #[test]
+    fn test_parse_arguments_slash() {
+        test_parse_arguments_good_compile(&stringvec!["/c", "foo.c", "/Fofoo.obj"]);
     }
 
     #[test]
