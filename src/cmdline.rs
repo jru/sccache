@@ -23,6 +23,10 @@ use std::path::PathBuf;
 
 /// A specific command to run.
 pub enum Command {
+    /// Query locally
+    Query {
+        cmdline: Vec<OsString>
+    },
     /// Show usage and exit.
     Usage,
     /// Show cache statistics and exit.
@@ -50,7 +54,8 @@ fn get_app<'a, 'b>() -> App<'a, 'b> {
         .version(env!("CARGO_PKG_VERSION"))
         .setting(AppSettings::TrailingVarArg)
         .args_from_usage(
-            "-s --show-stats 'show cache statistics'
+            "-q --query 'query compiler locally'
+             -s --show-stats 'show cache statistics'
              --start-server  'start background server'
              --stop-server   'stop background server'"
                 )
@@ -78,6 +83,8 @@ pub fn parse() -> Command {
         Ok(val) => val == "1",
         Err(_) => false,
     };
+
+    let query = matches.is_present("query");
     let show_stats = matches.is_present("show-stats");
     let start_server = matches.is_present("start-server");
     let stop_server = matches.is_present("stop-server");
@@ -86,7 +93,7 @@ pub fn parse() -> Command {
     fn is_some<T>(x : &Option<T>) -> bool {
         x.is_some()
     }
-    if [
+    if [query,
         internal_start_server,
         show_stats,
         start_server,
@@ -108,11 +115,20 @@ pub fn parse() -> Command {
     } else if let Some(mut args) = cmd {
         if let Ok(cwd) = env::current_dir() {
             if let Some(exe) = args.next() {
+
                 let cmdline = args.map(|s| s.to_owned()).collect::<Vec<_>>();
-                Command::Compile {
-                    exe: exe.to_owned(),
-                    cmdline: cmdline,
-                    cwd: cwd,
+
+                if query {
+                    Command::Query {
+                        cmdline: cmdline        
+                    }
+                }
+                else {
+                    Command::Compile {
+                        exe: exe.to_owned(),
+                        cmdline: cmdline,
+                        cwd: cwd,
+                    }
                 }
             } else {
                 println!("sccache: No compile command");

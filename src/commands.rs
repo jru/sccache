@@ -21,6 +21,8 @@ use cmdline::Command;
 use compiler::{
     run_input_output,
 };
+use compiler::{CompilerKind, CompilerArguments};
+
 use log::LogLevel::Trace;
 use mock_command::{
     CommandCreatorSync,
@@ -398,11 +400,40 @@ pub fn do_compile<T, U, V, W, X, Y>(creator: T,
           })
 }
 
+macro_rules! stringvec {
+    ( $( $x:expr ),* ) => {
+        vec!($( $x.to_owned(), )*)
+    };
+}
+
 /// Run `cmd` and return the process exit status.
 pub fn run_command(cmd : Command) -> i32 {
     match cmd {
         // Actual usage gets printed in `cmdline::parse`.
         Command::Usage => 0,
+        Command::Query{ cmdline:cmd } => {
+
+            let c = CompilerKind::Msvc{ includes_prefix: "blah".to_string() };
+            let ss = cmd.iter().map(|s| s.clone().into_string().unwrap()).collect::<Vec<_>>();
+            
+            match c.parse_arguments(&ss.as_slice()) {
+
+                CompilerArguments::Ok(args) => {
+                    println!("Ok:");
+                    println!(" - Input: {}", args.input);
+                    println!(" - Object: {}", args.outputs["obj"]);
+                    if let Some(pdb) = args.outputs.get("pdb") {
+                        println!(" - PDB: {}", pdb);
+                    }
+                    println!(" - Common: {}", args.common_args.join(" "));
+                    println!(" - Preproc: {}", args.preprocessor_args.join(" "));
+                    return 0;
+                },
+                CompilerArguments::CannotCache =>    println!("Cannot cache"),
+                CompilerArguments::NotCompilation => println!("Not a compile"),
+            }
+            return 1;
+        },
         Command::ShowStats => {
             trace!("Command::ShowStats");
             result_exit_code(connect_or_start_server(DEFAULT_PORT).and_then(request_stats).and_then(print_stats),
