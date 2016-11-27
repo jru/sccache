@@ -89,6 +89,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
     let mut output_arg = None;
     let mut input_arg = None;
     let mut common_args = vec!();
+    let mut preproc_args = vec!();
     let mut compilation = false;
     let mut debug_info = false;
     let mut pdb = None;
@@ -103,15 +104,8 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                         "c" => compilation = true,
                         v if v.starts_with("Fo") => {
                             output_arg = Some(String::from(&v[2..]));
-                        }
-                        // Arguments that take a value.
-                        "FI" => {
-                            common_args.push(arg.clone());
-                            if let Some(arg_val) = it.next() {
-                                common_args.push(arg_val.clone());
-                            }
-                        }
-                        v @ _ if v.starts_with("deps") => {
+                        },
+                        v if v.starts_with("deps") => {
                             depfile = Some(v[4..].to_owned());
                         }
                         // Arguments we can't handle
@@ -129,9 +123,25 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                             common_args.push(arg.clone());
                         }
                         // Other options.
-                        //v if v.starts_with('-') && v.len() > 1 => {
-                        _ => {
-                            common_args.push(arg.clone());
+                        v => {
+
+                            // Special bucket for preprocesor arguments (all take a value)
+                            let preproc_switches = ["FI", "I", "D", "U"];
+                            let found = preproc_switches.iter().find(|&&a| v.starts_with(a));
+                            if let Some(switch) = found {
+                                preproc_args.push(arg.clone());
+
+                                //Check if the value is passed as a separate argument
+                                if v.len() == switch.len() {
+                                    if let Some(value) = it.next() {
+                                        preproc_args.push(value.clone());
+                                    }
+                                }
+                            }
+                            else {
+                                //Any other unrecognized switch goes to the compiler bucket
+                                common_args.push(arg.clone());
+                            }
                         }
                     },
                     response_file if response_file.starts_with('@') => {
@@ -202,7 +212,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
         extension: extension,
         depfile: depfile,
         outputs: outputs,
-        preprocessor_args: vec!(),
+        preprocessor_args: preproc_args,
         common_args: common_args,
     })
 }
@@ -254,6 +264,7 @@ pub fn preprocess<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, p
         .arg(&parsed_args.input)
         .arg("-nologo")
         .args(&parsed_args.common_args)
+        .args(&parsed_args.preprocessor_args)
         .current_dir(cwd);
     if parsed_args.depfile.is_some() {
         cmd.arg("-showIncludes");
@@ -348,6 +359,7 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
             .arg(&parsed_args.input)
             .arg(&format!("-Fo{}", out_file))
             .args(&parsed_args.common_args)
+            .args(&parsed_args.preprocessor_args)
             .current_dir(cwd);
 
         if log_enabled!(Trace) {
@@ -442,8 +454,8 @@ mod test {
                 assert_map_contains!(outputs, ("obj", "foo.obj"));
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(1, outputs.len());
-                assert!(preprocessor_args.is_empty());
-                assert_eq!(common_args, &["-FI", "file"]);
+                assert_eq!(preprocessor_args, &["-FI", "file"]);
+                assert!(common_args.is_empty());
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }

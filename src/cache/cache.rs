@@ -240,11 +240,13 @@ pub fn hash_key(compiler: &Compiler, args: &[String], preprocessor_output: &[u8]
     //TODO: drop the compiler filename from the hash
     m.update(compiler.executable.as_bytes());
     m.update(CACHE_VERSION);
-    let last = args.len() - 1;
-    for (i, arg) in args.iter().enumerate() {
-        m.update(arg.as_bytes());
-        if i < last {
-            m.update(&b" "[..]);
+    if args.len() > 0 {
+        let last = args.len() - 1;
+        for (i, arg) in args.iter().enumerate() {
+            m.update(arg.as_bytes());
+            if i < last {
+                m.update(&b" "[..]);
+            }
         }
     }
     //TODO: should propogate these over from the client.
