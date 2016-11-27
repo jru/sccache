@@ -114,11 +114,12 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                         v @ _ if v.starts_with("deps") => {
                             depfile = Some(v[4..].to_owned());
                         }
-                        // Arguments we can't handle.
-                        "showIncludes" => return CompilerArguments::CannotCache,
-                        // Arguments we can't handle because they output more files.
+                        // Arguments we can't handle
                         // TODO: support more multi-file outputs.
-                        "FA" | "Fa" | "Fe" | "Fm" | "Fp" | "FR" | "Fx" => return CompilerArguments::CannotCache,
+                        "showIncludes" | "FA" | "Fa" | "Fe" | "Fm" | "Fp" | "FR" | "Fx" => {
+                            info!("Cannot cache: Argument {:?} is unsupported", arg);
+                            return CompilerArguments::CannotCache;
+                        },
                         "Zi" => {
                             debug_info = true;
                             common_args.push(arg.clone());
@@ -133,10 +134,14 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                             common_args.push(arg.clone());
                         }
                     },
-                    a if a.starts_with('@') => return CompilerArguments::CannotCache,
+                    response_file if response_file.starts_with('@') => {
+                        info!("Cannot cache: Found response file {:?}", response_file);
+                        return CompilerArguments::CannotCache;
+                    },
                     // Anything else is an input file.
                     _ => {
-                        if input_arg.is_some() {
+                        if let Some(first) = input_arg {
+                            info!("Cannot cache: More than one input provided. First {:?} and second {:?}", first, arg);
                             // Can't cache compilations with multiple inputs.
                             return CompilerArguments::CannotCache;
                         }
@@ -149,6 +154,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
     }
     // We only support compilation.
     if !compilation {
+        info!("Cannot cache: Not a compilation command");
         return CompilerArguments::NotCompilation;
     }
     let (input, extension) = match input_arg {
@@ -156,18 +162,24 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
             match Path::new(i).extension().and_then(|e| e.to_str()) {
                 Some(e) => (i.to_owned(), e.to_owned()),
                 _ => {
-                    trace!("Bad or missing source extension: {:?}", i);
+                    info!("Cannot cache: Bad or missing source extension for {:?}", i);
                     return CompilerArguments::CannotCache;
                 }
             }
         }
         // We can't cache compilation without an input.
-        None => return CompilerArguments::CannotCache,
+        None => {
+            info!("Cannot cache: No inputs provided");
+            return CompilerArguments::CannotCache;
+        },
     };
     let mut outputs = HashMap::new();
     match output_arg {
         // We can't cache compilation that doesn't go to a file
-        None => return CompilerArguments::CannotCache,
+        None => {
+            info!("Cannot cache: Compilation output does not go to a file");
+            return CompilerArguments::CannotCache;
+        },
         Some(o) => {
             outputs.insert("obj", o.to_owned());
             // -Fd is not taken into account unless -Zi is given
@@ -175,6 +187,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                 match pdb {
                     Some(p) => outputs.insert("pdb", p.to_owned()),
                     None => {
+                        info!("Cannot cache: Debug info is enabled but no PDB file is specified");
                         // -Zi without -Fd defaults to vcxxx.pdb (where xxx depends on the
                         // MSVC version), and that's used for all compilations with the same
                         // working directory. We can't cache such a pdb.
@@ -321,7 +334,7 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
         .current_dir(cwd);
 
     if log_enabled!(Trace) {
-        trace!("compile: {:?}", cmd);
+        trace!("first try to compile, from preprocessed source: {:?}", cmd);
     }
 
     let output = try!(run_input_output(cmd, None));
@@ -338,7 +351,7 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
             .current_dir(cwd);
 
         if log_enabled!(Trace) {
-            trace!("compile: {:?}", cmd);
+            trace!("second try to compile, from input: {:?}", cmd);
         }
 
         let output = try!(run_input_output(cmd, None));
