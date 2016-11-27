@@ -119,7 +119,8 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                             common_args.push(arg.clone());
                         }
                         v if v.starts_with("Fd") => {
-                            pdb = Some(String::from(&v[2..]));
+                            let index_start = if v.len() > 2 && v.as_bytes()[2] == ':' as u8 {3} else {2};
+                            pdb = Some(String::from(&v[index_start..]));
                             common_args.push(arg.clone());
                         }
                         // Other options.
