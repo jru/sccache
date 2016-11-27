@@ -34,7 +34,7 @@ use std::io::{
     ErrorKind,
     Write,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{self,Stdio};
 use tempdir::TempDir;
 
@@ -168,10 +168,11 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
         info!("Cannot cache: Not a compilation command");
         return CompilerArguments::NotCompilation;
     }
-    let (input, extension) = match input_arg {
+    let (input, filestem, extension) = match input_arg {
         Some(i) => {
-            match Path::new(i).extension().and_then(|e| e.to_str()) {
-                Some(e) => (i.to_owned(), e.to_owned()),
+            let input_path = Path::new(i);
+            match input_path.extension().and_then(|e| e.to_str()) {
+                Some(e) => (i.to_owned(), input_path.file_stem().unwrap(), e.to_owned()),
                 _ => {
                     info!("Cannot cache: Bad or missing source extension for {:?}", i);
                     return CompilerArguments::CannotCache;
@@ -192,7 +193,20 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
             return CompilerArguments::CannotCache;
         },
         Some(o) => {
-            outputs.insert("obj", o.to_owned());
+
+            //If the path given for the output is a directory, CL will
+            //assign it the name of the input but ending with .obj
+            let output_path = Path::new(&o);
+            if output_path.is_dir() {
+                let mut buf = PathBuf::new();
+                buf.push(output_path);
+                buf.push(filestem);
+                buf.set_extension("obj");
+                outputs.insert("obj", buf.to_string_lossy().into_owned());
+            }
+            else {
+                outputs.insert("obj", o.to_owned());
+            }
             // -Fd is not taken into account unless -Zi is given
             if debug_info {
                 match pdb {
