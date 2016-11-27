@@ -109,8 +109,8 @@ pub struct ParsedArguments {
     pub outputs: HashMap<&'static str, String>,
     /// Commandline arguments for the preprocessor.
     pub preprocessor_args: Vec<String>,
-    /// Commandline arguments for the preprocessor or the compiler.
-    pub common_args: Vec<String>,
+    /// Commandline arguments for the compiler
+    pub compiler_args: Vec<String>,
 }
 
 impl ParsedArguments {
@@ -285,7 +285,7 @@ impl Compiler {
         }
         trace!("[{}]: Preprocessor output is {} bytes", out_file, preprocessor_result.stdout.len());
 
-        let key = hash_key(self, arguments, &preprocessor_result.stdout);
+        let key = hash_key(self, &parsed_args.compiler_args, &preprocessor_result.stdout);
         trace!("[{}]: Hash key: {}", out_file, key);
         let pwd = Path::new(cwd);
         let outputs = parsed_args.outputs.iter()

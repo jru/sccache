@@ -425,7 +425,7 @@ pub fn run_command(cmd : Command) -> i32 {
                     if let Some(pdb) = args.outputs.get("pdb") {
                         println!(" - PDB: {}", pdb);
                     }
-                    println!(" - Common: {}", args.common_args.join(" "));
+                    println!(" - Common: {}", args.compiler_args.join(" "));
                     println!(" - Preproc: {}", args.preprocessor_args.join(" "));
                     return 0;
                 },

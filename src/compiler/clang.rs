@@ -63,20 +63,20 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
         .arg(&input)
         .arg("-o")
         .arg(&out_file)
-        .args(&parsed_args.common_args)
+        .args(&parsed_args.compiler_args)
         .current_dir(cwd);
 
     // clang may fail when compiling preprocessor output with -Werror,
     // so retry compilation from the original input file if it fails and
     // -Werror is in the commandline.
     let output = try!(run_input_output(cmd, None));
-    if !output.status.success() && parsed_args.common_args.iter().any(|a| a.starts_with("-Werror")) {
+    if !output.status.success() && parsed_args.compiler_args.iter().any(|a| a.starts_with("-Werror")) {
         let mut cmd = creator.new_command_sync(&compiler.executable);
         cmd.arg("-c")
             .arg(&parsed_args.input)
             .arg("-o")
             .arg(&out_file)
-            .args(&parsed_args.common_args)
+            .args(&parsed_args.compiler_args)
             .current_dir(cwd);
         let output = try!(run_input_output(cmd, None));
         Ok((Cacheable::Yes, output))
@@ -101,7 +101,7 @@ mod test {
     #[test]
     fn test_parse_arguments_simple() {
         match _parse_arguments(&stringvec!["-c", "foo.c", "-o", "foo.o"]) {
-            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
+            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, compiler_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.c", input);
                 assert_eq!("c", extension);
@@ -109,7 +109,7 @@ mod test {
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(1, outputs.len());
                 assert!(preprocessor_args.is_empty());
-                assert!(common_args.is_empty());
+                assert!(compiler_args.is_empty());
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
@@ -118,7 +118,7 @@ mod test {
     #[test]
     fn test_parse_arguments_values() {
         match _parse_arguments(&stringvec!["-c", "foo.cxx", "-arch", "xyz", "-fabc","-I", "include", "-o", "foo.o", "-include", "file"]) {
-            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
+            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, compiler_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.cxx", input);
                 assert_eq!("cxx", extension);
@@ -126,7 +126,7 @@ mod test {
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(1, outputs.len());
                 assert!(preprocessor_args.is_empty());
-                assert_eq!(stringvec!["-arch", "xyz", "-fabc", "-I", "include", "-include", "file"], common_args);
+                assert_eq!(stringvec!["-arch", "xyz", "-fabc", "-I", "include", "-include", "file"], compiler_args);
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
@@ -142,7 +142,7 @@ mod test {
             depfile: None,
             outputs: vec![("obj", "foo.o".to_owned())].into_iter().collect::<HashMap<&'static str, String>>(),
             preprocessor_args: vec!(),
-            common_args: vec!(),
+            compiler_args: vec!(),
         };
         let compiler = Compiler::new(f.bins[0].to_str().unwrap(),
                                      CompilerKind::Clang).unwrap();
@@ -164,7 +164,7 @@ mod test {
             depfile: None,
             outputs: vec![("obj", "foo.o".to_owned())].into_iter().collect::<HashMap<&'static str, String>>(),
             preprocessor_args: vec!(),
-            common_args: stringvec!("-c", "-o", "foo.o", "-Werror=blah", "foo.c"),
+            compiler_args: stringvec!("-c", "-o", "foo.o", "-Werror=blah", "foo.c"),
         };
         let compiler = Compiler::new(f.bins[0].to_str().unwrap(),
                                      CompilerKind::Clang).unwrap();

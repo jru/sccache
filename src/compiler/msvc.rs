@@ -88,7 +88,7 @@ pub fn detect_showincludes_prefix<T : CommandCreatorSync, U: AsRef<OsStr>>(mut c
 pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
     let mut output_arg = None;
     let mut input_arg = None;
-    let mut common_args = vec!();
+    let mut compiler_args = vec!();
     let mut preproc_args = vec!();
     let mut compilation = false;
     let mut debug_info = false;
@@ -116,12 +116,12 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                         },
                         "Zi" => {
                             debug_info = true;
-                            common_args.push(arg.clone());
+                            compiler_args.push(arg.clone());
                         }
                         v if v.starts_with("Fd") => {
                             let index_start = if v.len() > 2 && v.as_bytes()[2] == ':' as u8 {3} else {2};
                             pdb = Some(String::from(&v[index_start..]));
-                            common_args.push(arg.clone());
+                            compiler_args.push(arg.clone());
                         }
                         // Other options.
                         v => {
@@ -141,7 +141,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                             }
                             else {
                                 //Any other unrecognized switch goes to the compiler bucket
-                                common_args.push(arg.clone());
+                                compiler_args.push(arg.clone());
                             }
                         }
                     },
@@ -228,7 +228,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
         depfile: depfile,
         outputs: outputs,
         preprocessor_args: preproc_args,
-        common_args: common_args,
+        compiler_args: compiler_args,
     })
 }
 
@@ -278,8 +278,8 @@ pub fn preprocess<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, p
     cmd.arg("-E")
         .arg(&parsed_args.input)
         .arg("-nologo")
-        .args(&parsed_args.common_args)
         .args(&parsed_args.preprocessor_args)
+        .args(&parsed_args.compiler_args)
         .current_dir(cwd);
     if parsed_args.depfile.is_some() {
         cmd.arg("-showIncludes");
@@ -356,7 +356,7 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
     cmd.arg("-c")
         .arg(&input)
         .arg(&format!("-Fo{}", out_file))
-        .args(&parsed_args.common_args)
+        .args(&parsed_args.compiler_args)
         .current_dir(cwd);
 
     if log_enabled!(Trace) {
@@ -373,8 +373,8 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
         cmd.arg("-c")
             .arg(&parsed_args.input)
             .arg(&format!("-Fo{}", out_file))
-            .args(&parsed_args.common_args)
             .args(&parsed_args.preprocessor_args)
+            .args(&parsed_args.compiler_args)
             .current_dir(cwd);
 
         if log_enabled!(Trace) {
@@ -418,7 +418,7 @@ mod test {
     fn test_parse_arguments_good_compile(arguments: &[String])
     {
         match parse_arguments(&arguments) {
-            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
+            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, compiler_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.c", input);
                 assert_eq!("c", extension);
@@ -426,7 +426,7 @@ mod test {
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(1, outputs.len());
                 assert!(preprocessor_args.is_empty());
-                assert!(common_args.is_empty());
+                assert!(compiler_args.is_empty());
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
@@ -445,7 +445,7 @@ mod test {
     #[test]
     fn test_parse_arguments_extra() {
         match parse_arguments(&stringvec!["-c", "foo.c", "-foo", "-Fofoo.obj", "-bar"]) {
-            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
+            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, compiler_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.c", input);
                 assert_eq!("c", extension);
@@ -453,7 +453,7 @@ mod test {
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(1, outputs.len());
                 assert!(preprocessor_args.is_empty());
-                assert_eq!(common_args, &["-foo", "-bar"]);
+                assert_eq!(compiler_args, &["-foo", "-bar"]);
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
@@ -462,7 +462,7 @@ mod test {
     #[test]
     fn test_parse_arguments_values() {
         match parse_arguments(&stringvec!["-c", "foo.c", "-FI", "file", "-Fofoo.obj"]) {
-            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
+            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, compiler_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.c", input);
                 assert_eq!("c", extension);
@@ -470,7 +470,7 @@ mod test {
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(1, outputs.len());
                 assert_eq!(preprocessor_args, &["-FI", "file"]);
-                assert!(common_args.is_empty());
+                assert!(compiler_args.is_empty());
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
@@ -479,7 +479,7 @@ mod test {
     #[test]
     fn test_parse_arguments_pdb() {
         match parse_arguments(&stringvec!["-c", "foo.c", "-Zi", "-Fdfoo.pdb", "-Fofoo.obj"]) {
-            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, common_args }) => {
+            CompilerArguments::Ok(ParsedArguments { input, extension, depfile: _depfile, outputs, preprocessor_args, compiler_args }) => {
                 assert!(true, "Parsed ok");
                 assert_eq!("foo.c", input);
                 assert_eq!("c", extension);
@@ -487,7 +487,7 @@ mod test {
                 //TODO: fix assert_map_contains to assert no extra keys!
                 assert_eq!(2, outputs.len());
                 assert!(preprocessor_args.is_empty());
-                assert_eq!(common_args, &["-Zi", "-Fdfoo.pdb"]);
+                assert_eq!(compiler_args, &["-Zi", "-Fdfoo.pdb"]);
             }
             o @ _ => assert!(false, format!("Got unexpected parse result: {:?}", o)),
         }
@@ -545,7 +545,7 @@ mod test {
             depfile: None,
             outputs: vec![("obj", "foo.obj".to_owned())].into_iter().collect::<HashMap<&'static str, String>>(),
             preprocessor_args: vec!(),
-            common_args: vec!(),
+            compiler_args: vec!(),
         };
         let compiler = Compiler::new(f.bins[0].to_str().unwrap(),
                                      CompilerKind::Msvc { includes_prefix: String::new() }).unwrap();
@@ -569,7 +569,7 @@ mod test {
             outputs: vec![("obj", "foo.obj".to_owned()),
                           ("pdb", pdb.to_str().unwrap().to_owned())].into_iter().collect::<HashMap<&'static str, String>>(),
             preprocessor_args: vec!(),
-            common_args: vec!(),
+            compiler_args: vec!(),
         };
         let compiler = Compiler::new(f.bins[0].to_str().unwrap(),
                                      CompilerKind::Msvc { includes_prefix: String::new() }).unwrap();
@@ -591,7 +591,7 @@ mod test {
             depfile: None,
             outputs: vec![("obj", "foo.obj".to_owned())].into_iter().collect::<HashMap<&'static str, String>>(),
             preprocessor_args: vec!(),
-            common_args: vec!(),
+            compiler_args: vec!(),
         };
         let compiler = Compiler::new(f.bins[0].to_str().unwrap(),
                                      CompilerKind::Msvc { includes_prefix: String::new() }).unwrap();
