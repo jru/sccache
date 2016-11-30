@@ -114,7 +114,7 @@ pub fn parse_arguments(arguments: &[String]) -> CompilerArguments {
                             info!("Cannot cache: Argument {:?} is unsupported", arg);
                             return CompilerArguments::CannotCache;
                         },
-                        "Zi" => {
+                        "Zi" | "ZI" => {
                             debug_info = true;
                             compiler_args.push(arg.clone());
                         }
@@ -331,17 +331,6 @@ pub fn preprocess<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, p
 pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, preprocessor_output: Vec<u8>, parsed_args: &ParsedArguments, cwd: &str) -> io::Result<(Cacheable, process::Output)> {
     trace!("compile");
     let out_file = try!(parsed_args.outputs.get("obj").ok_or(Error::new(ErrorKind::Other, "Missing object file output")));
-    // See if this compilation will produce a PDB.
-    let cacheable = parsed_args.outputs.get("pdb")
-        .map_or(Cacheable::Yes, |pdb| {
-            // If the PDB exists, we don't know if it's shared with another
-            // compilation. If it is, we can't cache.
-            if Path::new(cwd).join(pdb).exists() {
-                Cacheable::No
-            } else {
-                Cacheable::Yes
-            }
-        });
     // MSVC doesn't read anything from stdin, so it needs a temporary file
     // as input.
     let tempdir = try!(TempDir::new("sccache"));
@@ -365,7 +354,7 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
 
     let output = try!(run_input_output(cmd, None));
     if output.status.success() {
-        Ok((cacheable, output))
+        Ok((Cacheable::Yes, output))
     } else {
         // Sometimes MSVC can't handle compiling from the preprocessed source,
         // so just compile from the original input file.
@@ -382,7 +371,7 @@ pub fn compile<T : CommandCreatorSync>(mut creator: T, compiler: &Compiler, prep
         }
 
         let output = try!(run_input_output(cmd, None));
-        Ok((cacheable, output))
+        Ok((Cacheable::Yes, output))
     }
 }
 
